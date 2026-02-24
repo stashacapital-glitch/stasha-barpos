@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/utils/supabase';
+import { createClient } from '@/utils/supabase'; // FIX: Corrected import path
 import { Check, Star, Zap, Loader2 } from 'lucide-react';
 
-export default function MainDashboard() {
+export default function PlansPage() {
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
@@ -110,7 +110,6 @@ export default function MainDashboard() {
                   ))}
                 </ul>
 
-                {/* Link to the POS Dashboard */}
                 <Link href="/pos" className="w-full">
                   <button
                     className={`w-full py-3 rounded-lg font-bold text-sm transition ${

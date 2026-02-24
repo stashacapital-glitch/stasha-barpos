@@ -1,107 +1,71 @@
- "use client";
-import { useState, useEffect } from 'react';
-import { formatMoney } from '@/lib/utils';
+ import React from 'react';
 
-interface ReceiptProps {
-  tableId: number;
-  items: any[];
-  subTotal: number;
-  discount: number;
-  vat: number;
-  service: number;
+type ReceiptItem = {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+};
+
+type ReceiptProps = {
+  items: ReceiptItem[];
+  tableId: string | number;
   total: number;
-  date: string;
-}
+  paymentMethod: string;
+  businessName?: string;
+  formatMoney: (amount: number) => string; // Add this prop
+};
 
-export default function Receipt({ tableId, items, subTotal, discount, vat, service, total, date }: ReceiptProps) {
-  const [profile, setProfile] = useState({ name: 'The Dev Bar', address: '', phone: '', taxId: '' });
-
-  useEffect(() => {
-    const savedProfile = localStorage.getItem('business_profile');
-    if (savedProfile) setProfile(JSON.parse(savedProfile));
-  }, []);
+const Receipt = ({ items, tableId, total, paymentMethod, businessName = "Stasha Bar", formatMoney }: ReceiptProps) => {
+  const currentDate = new Date().toLocaleString();
 
   return (
-    <div id="receipt-area" className="bg-white text-black p-4 font-mono text-xs w-72 mx-auto shadow-md">
-      
+    <div className="bg-white text-black p-4 font-mono text-sm w-full max-w-xs mx-auto border border-dashed border-gray-400">
       {/* Header */}
-      <div className="text-center mb-4">
-        <h1 className="text-lg font-bold uppercase tracking-wide">{profile.name}</h1>
-        {profile.address && <p className="text-[10px] text-gray-600 mt-1">{profile.address}</p>}
-        {profile.phone && <p className="text-[10px] text-gray-600">{profile.phone}</p>}
-        {profile.taxId && <p className="text-[10px] font-bold mt-2">PIN: {profile.taxId}</p>}
+      <div className="text-center border-b border-dashed border-gray-400 pb-2 mb-2">
+        <h1 className="text-lg font-bold">{businessName}</h1>
+        <p className="text-xs">Nairobi, Kenya</p>
+        <p className="text-xs">Tel: +254 700 000 000</p>
       </div>
 
-      {/* Meta Data */}
-      <div className="border-t border-b border-dashed border-gray-300 py-2 mb-3 text-[11px] flex justify-between">
-        <div>
-          <p>Date: {date}</p>
-          <p>Table: {tableId}</p>
-        </div>
-        <div className="text-right">
-          <p>Staff: {typeof window !== 'undefined' ? localStorage.getItem('current_staff') || 'Admin' : 'Admin'}</p>
-        </div>
+      {/* Meta Info */}
+      <div className="flex justify-between text-xs mb-2">
+        <span>Date: {currentDate}</span>
+      </div>
+      <div className="flex justify-between text-xs mb-2 border-b border-dashed border-gray-400 pb-2">
+        <span>Table: {tableId}</span>
+        <span>Method: {paymentMethod.toUpperCase()}</span>
       </div>
 
-      {/* Items Table */}
-      <table className="w-full text-[11px] mb-3">
-        <thead>
-          <tr className="border-b border-gray-200">
-            <th className="text-left py-1 font-normal text-gray-500">Item</th>
-            <th className="text-center py-1 font-normal text-gray-500 w-12">Qty</th>
-            <th className="text-right py-1 font-normal text-gray-500">Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, idx) => (
-            <tr key={idx} className="border-b border-gray-50">
-              <td className="py-1.5">{item.name}</td>
-              <td className="text-center py-1.5">{item.qty}</td>
-              <td className="text-right py-1.5">{formatMoney(item.price * item.qty)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Items List */}
+      <div className="border-b border-dashed border-gray-400 pb-2 mb-2">
+        {items.map((item) => (
+          <div key={item.id} className="flex justify-between mb-1">
+            <span className="w-1/2 truncate">{item.name}</span>
+            <span className="w-1/4 text-center">x{item.quantity}</span>
+            {/* Use the formatter here */}
+            <span className="w-1/4 text-right">{formatMoney(item.price * item.quantity)}</span>
+          </div>
+        ))}
+      </div>
 
       {/* Totals */}
-      <div className="border-t border-gray-200 pt-2 text-[11px] space-y-1">
-        <div className="flex justify-between">
-          <span className="text-gray-600">Subtotal</span>
-          <span>{formatMoney(subTotal)}</span>
-        </div>
-
-        {discount > 0 && (
-          <div className="flex justify-between text-green-600">
-            <span>Discount</span>
-            <span>- {formatMoney(discount)}</span>
-          </div>
-        )}
-
-        {vat > 0 && (
-          <div className="flex justify-between">
-            <span className="text-gray-600">VAT (16%)</span>
-            <span>{formatMoney(vat)}</span>
-          </div>
-        )}
-
-        {service > 0 && (
-          <div className="flex justify-between">
-            <span className="text-gray-600">Service Chrg</span>
-            <span>{formatMoney(service)}</span>
-          </div>
-        )}
-
-        <div className="flex justify-between font-bold text-sm border-t border-gray-300 mt-2 pt-2">
+      <div className="border-b border-dashed border-gray-400 pb-2 mb-2">
+        <div className="flex justify-between font-bold text-base">
           <span>TOTAL</span>
+          {/* Use the formatter here */}
           <span>KES {formatMoney(total)}</span>
         </div>
+        <p className="text-xs text-center mt-1">Inclusive of VAT</p>
       </div>
 
       {/* Footer */}
-      <div className="text-center mt-6 text-[10px] text-gray-500">
-        <p>Thank you for your business!</p>
-        <p className="mt-1">Powered by StashaPOS</p>
+      <div className="text-center text-xs mt-4">
+        <p>Thank you for your visit!</p>
+        <p>Powered by StashaPOS</p>
       </div>
     </div>
   );
-}
+};
+
+export default Receipt;

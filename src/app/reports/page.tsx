@@ -1,102 +1,132 @@
- "use client";
+ 'use client';
+
 import { useState, useEffect } from 'react';
+import { createClient } from '@/utils/supabase';
 import Link from 'next/link';
-import { formatMoney } from '@/lib/utils';
+import { ArrowLeft, Package, DollarSign, AlertTriangle } from 'lucide-react';
 
 export default function ReportsPage() {
   const [sales, setSales] = useState<any[]>([]);
-  const [expenses, setExpenses] = useState<any[]>([]);
-  const [plan, setPlan] = useState('Basic');
-  const [activeTab, setActiveTab] = useState('overview'); // overview or audit
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClient();
 
   useEffect(() => {
-    const activePlan = localStorage.getItem('activePlan') || 'Basic';
-    setPlan(activePlan);
-    
-    const history = JSON.parse(localStorage.getItem('sales_history') || '[]');
-    setSales(history.reverse());
-
-    const expData = JSON.parse(localStorage.getItem('business_expenses') || '[]');
-    setExpenses(expData);
+    fetchData();
   }, []);
 
-  // Calculations
-  const totalSales = sales.filter(s => s.paymentMethod !== 'Reception Payment').reduce((sum, s) => sum + (s.total || 0), 0);
-  const totalCash = sales.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + (s.total || 0), 0);
-  const totalMpesa = sales.filter(s => s.paymentMethod === 'M-Pesa').reduce((sum, s) => sum + (s.total || 0), 0);
-  
-  // NEW: Expense Totals
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-  
-  // NEW: Net Profit
-  const netProfit = totalSales - totalExpenses;
+  const fetchData = async () => {
+    setLoading(true);
+    
+    // 1. Fetch Today's Sales (Mockup from orders table if exists, or local logic)
+    // For now, we fetch inventory to calculate potential sales
+    const { data: items } = await supabase
+        .from('menu_items')
+        .select('*');
+    
+    if (items) setInventory(items);
 
-  if (plan === 'Basic') {
-    return (
-      <main className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-8">
-        <h1 className="text-2xl font-bold text-red-500 mb-4">Feature Not Available</h1>
-        <p className="text-gray-400 mb-6">Financial Reports are not available on the Basic plan.</p>
-        <Link href="/pos" className="bg-blue-600 px-6 py-2 rounded">Back to Tables</Link>
-      </main>
-    );
-  }
+    // 2. In a real app, you would fetch from 'orders' table
+    // const { data: orderData } = await supabase.from('orders').select('*').eq('date', today);
+    
+    setLoading(false);
+  };
+
+  // Manual Input for "Actual Counted Stock"
+  const handleCountChange = async (itemId: string, count: number) => {
+    // Update local state for immediate visual feedback
+    setInventory(prev => prev.map(i => i.id === itemId ? {...i, actual_count: count} : i));
+    
+    // In a real scenario, you might save this to an 'inventory_log' table
+    // await supabase.from('inventory_log').insert([{ item_id: itemId, type: 'count', quantity: count }]);
+  };
 
   return (
-    <main className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-5xl mx-auto">
-        <header className="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
-          <h1 className="text-3xl font-bold text-purple-400">Financial Overview</h1>
-          <Link href="/pos" className="bg-gray-600 px-4 py-2 rounded text-sm hover:bg-gray-500">Back to Tables</Link>
-        </header>
-
-        {/* Overview Tab */}
-        <div className="space-y-6">
-            
-            {/* Top Row: Revenue & Profit */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                <div className="bg-green-900 p-4 rounded-xl border border-green-600">
-                    <p className="text-sm text-gray-300">Total Revenue</p>
-                    <p className="text-2xl font-bold">KES {formatMoney(totalSales)}</p>
-                </div>
-                <div className="bg-red-900 p-4 rounded-xl border border-red-600">
-                    <p className="text-sm text-gray-300">Total Expenses</p>
-                    <p className="text-2xl font-bold">- KES {formatMoney(totalExpenses)}</p>
-                </div>
-                <div className={`p-4 rounded-xl border ${netProfit >= 0 ? 'bg-blue-900 border-blue-600' : 'bg-gray-800 border-gray-600'}`}>
-                    <p className="text-sm text-gray-300">Net Profit / Loss</p>
-                    <p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        KES {formatMoney(netProfit)}
-                    </p>
-                </div>
-            </div>
-
-            {/* Payment Breakdown */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-gray-800 p-4 rounded-xl border border-gray-600">
-                <p className="text-xs text-gray-400">Cash Sales</p>
-                <p className="text-xl font-bold text-white">KES {formatMoney(totalCash)}</p>
-              </div>
-              <div className="bg-gray-800 p-4 rounded-xl border border-gray-600">
-                <p className="text-xs text-gray-400">M-Pesa Sales</p>
-                <p className="text-xl font-bold text-white">KES {formatMoney(totalMpesa)}</p>
-              </div>
-              <div className="bg-gray-800 p-4 rounded-xl border border-gray-600">
-                <p className="text-xs text-gray-400">Room Posts (Pending)</p>
-                <p className="text-xl font-bold text-white">KES {formatMoney(sales.filter(s => s.paymentMethod === 'Room Charge').reduce((sum, s) => sum + s.total, 0))}</p>
-              </div>
-            </div>
-
-            {/* Navigation Buttons */}
-            <div className="grid grid-cols-2 gap-4 mt-8">
-                <Link href="/audit" className="block w-full bg-gray-700 hover:bg-gray-600 py-3 rounded font-bold text-center">
-                    View Full Audit Trail
-                </Link>
-                <Link href="/expenses" className="block w-full bg-red-700 hover:bg-red-600 py-3 rounded font-bold text-center">
-                    Manage Expenses
-                </Link>
-            </div>
+    <div className="min-h-screen bg-gray-900 text-white p-6">
+        <div className="flex items-center gap-4 mb-8">
+            <Link href="/pos" className="text-gray-400 hover:text-white">
+                <ArrowLeft className="w-6 h-6" />
+            </Link>
+            <h1 className="text-3xl font-bold text-orange-400">Reports & Inventory</h1>
         </div>
-      </div>
-    </main>
+
+        {/* Tabs or Sections */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            {/* SECTION 1: DAILY SALES (Simplified) */}
+            <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <div className="flex items-center gap-2 mb-4">
+                    <DollarSign className="w-5 h-5 text-green-400" />
+                    <h2 className="text-xl font-bold">Daily Sales Summary</h2>
+                </div>
+                <p className="text-gray-400 text-sm mb-4">Calculated from orders placed today.</p>
+                
+                <div className="bg-gray-900 p-4 rounded">
+                    <p className="text-sm text-gray-400">Total Sales (Today)</p>
+                    <p className="text-3xl font-bold text-green-400">KES 0.00</p>
+                    <p className="text-xs text-gray-500 mt-2">(Feature requires completed Orders table flow)</p>
+                </div>
+            </div>
+
+            {/* SECTION 2: INVENTORY & RETURNS (The Formula) */}
+            <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <div className="flex items-center gap-2 mb-4">
+                    <Package className="w-5 h-5 text-blue-400" />
+                    <h2 className="text-xl font-bold">Inventory & Stock Control</h2>
+                </div>
+                
+                <table className="w-full text-xs">
+                    <thead>
+                        <tr className="text-gray-400 border-b border-gray-700">
+                            <th className="pb-2 text-left">Item</th>
+                            <th className="pb-2 text-center">Op</th>
+                            <th className="pb-2 text-center">Purch</th>
+                            <th className="pb-2 text-center">Sales</th>
+                            <th className="pb-2 text-center">Exp</th>
+                            <th className="pb-2 text-center">Actual</th>
+                            <th className="pb-2 text-center">Diff</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700">
+                        {inventory.map((item) => {
+                            const op = item.stock_quantity || 0; // Opening Stock (Current DB value)
+                            const purch = 0; // TODO: Sum of purchases today
+                            const sales = 0; // TODO: Count of sales today
+                            const expected = op + purch - sales;
+                            const actual = item.actual_count || 0; // User input
+                            const diff = expected - actual;
+
+                            return (
+                                <tr key={item.id}>
+                                    <td className="py-2 font-medium">{item.name}</td>
+                                    <td className="py-2 text-center">{op}</td>
+                                    <td className="py-2 text-center text-green-400">{purch}</td>
+                                    <td className="py-2 text-center text-red-400">{sales}</td>
+                                    <td className="py-2 text-center font-bold">{expected}</td>
+                                    <td className="py-2 text-center">
+                                        <input 
+                                            type="number" 
+                                            className="w-12 bg-gray-700 text-center rounded p-1"
+                                            value={actual}
+                                            onChange={(e) => handleCountChange(item.id, parseInt(e.target.value))}
+                                        />
+                                    </td>
+                                    <td className={`py-2 text-center font-bold ${diff !== 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                        {diff}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+                <div className="mt-4 text-right">
+                     <button className="bg-orange-500 text-black font-bold px-4 py-2 rounded text-sm">
+                         Save Stock Count
+                     </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
   );
 }

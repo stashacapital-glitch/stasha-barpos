@@ -2,296 +2,186 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createClient } from '@/utils/supabase'; // Adjusted to match your file structure
+import { createClient } from '@/utils/supabase';
 import toast from 'react-hot-toast';
+import { ArrowLeft } from 'lucide-react';
 
-// --- Types ---
-type OrderItem = {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  notes?: string;
-};
+type OrderItem = { id: string; name: string; price: number; quantity: number };
 
-type MenuCategory = 'food' | 'drinks' | 'desserts';
-
-export default function TablePage() {
+export default function TableOrderPage() {
   const params = useParams();
   const router = useRouter();
   const tableId = params.id as string;
 
-  // --- State ---
+  const [tableNumber, setTableNumber] = useState<string | null>(null);
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [order, setOrder] = useState<OrderItem[]>([]);
-  const [activeCategory, setActiveCategory] = useState<MenuCategory>('food');
+  const [orderId, setOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Modal State
-  const [showDiscountModal, setShowDiscountModal] = useState(false);
   
-  // Logic State
-  const [discountType, setDiscountType] = useState<'fixed' | 'percent'>('fixed');
-  const [discountValue, setDiscountValue] = useState(0);
-
   const supabase = createClient();
 
-  // --- Effects ---
   useEffect(() => {
+    fetchTableDetails();
     fetchMenu();
+    fetchActiveOrder();
   }, []);
 
-  const fetchMenu = async () => {
-    setLoading(true);
-    
-    // Attempt to fetch from Supabase
-    const { data, error } = await supabase
-      .from('menu_items') 
-      .select('*');
+  const fetchTableDetails = async () => {
+    const { data } = await supabase.from('tables').select('number').eq('id', tableId).single();
+    if (data) setTableNumber(data.number);
+  };
 
-    if (error) {
-      // Detailed error logging to help debug the "{}" error
-      console.error('Supabase Fetch Error:', error);
-      toast.error(`Error loading menu: ${error.message}. Check if table 'menu_items' exists.`);
-      setMenuItems([]); 
-    } else {
-      console.log('Menu Data:', data); // Log data to verify structure
-      setMenuItems(data || []);
-    }
-    
+  const fetchMenu = async () => {
+    const { data } = await supabase.from('menu_items').select('*');
+    setMenuItems(data || []);
     setLoading(false);
   };
 
-  // --- Order Logic ---
+  const fetchActiveOrder = async () => {
+    const { data } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('table_id', tableId)
+      .eq('status', 'open')
+      .maybeSingle();
+
+    if (data) {
+      setOrderId(data.id);
+      setOrder(data.items || []);
+    }
+  };
+
+  const saveOrderToDB = async (currentOrder: OrderItem[]) => {
+    try {
+      const total = currentOrder.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      
+      const orderData = {
+        table_id: tableId,
+        items: currentOrder,
+        total_price: total,
+        status: 'open',
+      };
+
+      let response;
+      if (orderId) {
+        response = await supabase.from('orders').update(orderData).eq('id', orderId);
+      } else {
+        response = await supabase.from('orders').insert([orderData]).select('id').single();
+        if (response.data) setOrderId(response.data.id);
+      }
+
+      // IMPROVED ERROR LOGGING
+      if (response && response.error) {
+        console.error("=== DB SAVE FAILED ===");
+        console.error("Error Object:", response.error);
+        console.error("Error Message:", response.error.message);
+        console.error("Error Details:", response.error.details);
+        console.error("Error Hint:", response.error.hint);
+        console.error("Error Code:", response.error.code);
+        console.error("=====================");
+        throw new Error(response.error.message || "Database permission error");
+      }
+
+    } catch (err: any) {
+      console.error("Save failed:", err);
+      toast.error(`Error: ${err.message}`);
+    }
+  };
+
   const addToOrder = (item: any) => {
     setOrder((prev) => {
       const existing = prev.find((i) => i.id === item.id);
+      let newOrder: OrderItem[];
       if (existing) {
-        return prev.map((i) =>
-          i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      }
-      return [...prev, { ...item, quantity: 1 }];
-    });
-    toast.success(`Added ${item.name}`);
-  };
-
-  const removeFromOrder = (itemId: string) => {
-    setOrder((prev) => prev.filter((i) => i.id !== itemId));
-  };
-
-  const calculateTotal = () => {
-    const subtotal = order.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    let discountAmount = 0;
-
-    if (discountValue > 0) {
-      if (discountType === 'fixed') {
-        discountAmount = discountValue;
+        newOrder = prev.map((i) => (i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i));
       } else {
-        discountAmount = subtotal * (discountValue / 100);
+        newOrder = [...prev, { ...item, quantity: 1 }];
       }
-    }
-
-    return {
-      subtotal,
-      discount: discountAmount,
-      total: subtotal - discountAmount,
-    };
+      saveOrderToDB(newOrder);
+      return newOrder;
+    });
+    toast.success(`${item.name} added`);
   };
 
-  const handleSubmitOrder = async () => {
-    if (order.length === 0) return;
-    
-    setLoading(true);
-    // TODO: Insert order into Supabase here
-    
-    toast.success('Order sent to kitchen!');
-    setOrder([]);
-    setLoading(false);
+  const removeFromOrder = (id: string) => {
+    const newOrder = order.filter((i) => i.id !== id);
+    setOrder(newOrder);
+    saveOrderToDB(newOrder);
   };
+
+  const total = order.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const handlePayment = async () => {
     if (order.length === 0) return;
-    // Navigate to payment page
+    await saveOrderToDB(order); 
+    localStorage.setItem('receipt_data', JSON.stringify({ items: order, tableNumber: tableNumber || tableId, total }));
     router.push(`/table/${tableId}/pay`);
   };
 
-  // --- Render ---
-  const totals = calculateTotal();
+  if (loading) return <div className="p-8 text-white">Loading...</div>;
 
   return (
     <div className="flex h-screen bg-gray-900 text-white">
-      {/* Left Side: Menu */}
-      <div className="flex-1 flex flex-col p-4 overflow-hidden">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold text-orange-400">Table {tableId}</h1>
-          <div className="flex gap-2">
-            {(['food', 'drinks', 'desserts'] as MenuCategory[]).map((cat) => (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => router.push('/pos')} className="text-gray-400 hover:text-white">
+              <ArrowLeft />
+            </button>
+            <h1 className="text-2xl font-bold text-orange-400">Table {tableNumber || '...'}</h1>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 bg-gray-950">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {menuItems.map((item) => (
               <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-4 py-2 rounded capitalize ${
-                  activeCategory === cat ? 'bg-orange-500 text-black' : 'bg-gray-700'
-                }`}
+                key={item.id}
+                onClick={() => addToOrder(item)}
+                className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-left hover:border-orange-500 transition group"
               >
-                {cat}
+                <span className="text-3xl block mb-2">{item.emoji}</span>
+                <h3 className="font-bold text-lg">{item.name}</h3>
+                <p className="text-orange-500 font-mono font-bold">KES {item.price}</p>
               </button>
             ))}
           </div>
         </div>
-
-        {/* Menu Grid */}
-        <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {loading ? (
-            <p className="text-gray-400">Loading menu...</p>
-          ) : menuItems.length === 0 ? (
-             <p className="text-gray-400 col-span-full text-center">
-               No menu items found. Please add items in Supabase or check RLS policies.
-             </p>
-          ) : (
-            menuItems
-              .filter((item) => item.category === activeCategory)
-              .map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => addToOrder(item)}
-                  className="bg-gray-800 p-4 rounded-lg text-left hover:bg-gray-700 transition border border-gray-700"
-                >
-                  <h3 className="font-bold text-lg">{item.name}</h3>
-                  <p className="text-orange-400 font-mono">KES {item.price}</p>
-                </button>
-              ))
-          )}
-        </div>
       </div>
 
-      {/* Right Side: Order Summary */}
-      <div className="w-96 bg-gray-800 p-4 flex flex-col border-l border-gray-700">
-        <h2 className="text-xl font-bold mb-4 border-b border-gray-600 pb-2">Current Order</h2>
-        
-        <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+      <div className="w-96 bg-gray-900 border-l border-gray-800 flex flex-col">
+        <div className="p-4 border-b border-gray-800">
+          <h2 className="text-xl font-bold">Current Order</h2>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {order.length === 0 ? (
-            <p className="text-gray-500 text-center">No items yet</p>
+            <p className="text-gray-600 text-center text-sm mt-10">No items</p>
           ) : (
             order.map((item) => (
-              <div key={item.id} className="bg-gray-700 p-3 rounded flex justify-between items-center">
+              <div key={item.id} className="bg-gray-800 rounded-lg p-3 flex justify-between items-center">
                 <div>
                   <p className="font-medium">{item.name}</p>
-                  <p className="text-sm text-gray-400">
-                    {item.quantity} x KES {item.price}
-                  </p>
+                  <p className="text-xs text-gray-500">{item.quantity} x {item.price}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                   <button 
-                     onClick={() => removeFromOrder(item.id)}
-                     className="text-red-500 text-xs hover:underline p-1"
-                   >
-                     ✕
-                   </button>
-                   <span className="font-bold">KES {item.price * item.quantity}</span>
+                  <span className="font-bold">KES {item.price * item.quantity}</span>
+                  <button onClick={() => removeFromOrder(item.id)} className="text-red-500 text-xs">✕</button>
                 </div>
               </div>
             ))
           )}
         </div>
-
-        {/* Totals */}
-        <div className="border-t border-gray-600 pt-4 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Subtotal:</span>
-            <span>KES {totals.subtotal}</span>
+        <div className="p-4 border-t border-gray-800">
+          <div className="flex justify-between font-bold text-xl mb-4">
+            <span>Total</span>
+            <span className="text-orange-400">KES {total.toLocaleString()}</span>
           </div>
-          {totals.discount > 0 && (
-            <div className="flex justify-between text-sm text-green-400">
-              <span>Discount:</span>
-              <span>- KES {totals.discount}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-bold text-lg">
-            <span>Total:</span>
-            <span>KES {totals.total}</span>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-2 mt-4">
-            <button
-              onClick={() => setShowDiscountModal(true)}
-              className="bg-blue-600 py-2 rounded font-bold hover:bg-blue-500 disabled:opacity-50"
-              disabled={order.length === 0}
-            >
-              Discount
-            </button>
-            <button
-              onClick={handleSubmitOrder}
-              className="bg-yellow-600 py-2 rounded font-bold hover:bg-yellow-500 disabled:opacity-50"
-              disabled={order.length === 0}
-            >
-              Send Order
-            </button>
-            <button
-              onClick={handlePayment}
-              className="col-span-2 bg-green-600 py-3 rounded font-bold text-lg hover:bg-green-500 disabled:opacity-50"
-              disabled={order.length === 0}
-            >
-              Pay (KES {totals.total})
-            </button>
-          </div>
+          <button onClick={handlePayment} disabled={order.length === 0} className="w-full bg-green-600 py-4 rounded-lg font-bold text-lg disabled:bg-gray-700">
+            PAY
+          </button>
         </div>
       </div>
-
-      {/* Discount Modal */}
-      {showDiscountModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-gray-800 p-6 rounded-xl w-full max-w-xs">
-            <h2 className="text-xl font-bold mb-4 text-orange-400">Apply Discount</h2>
-            
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setDiscountType('fixed')}
-                className={`flex-1 py-2 rounded text-sm ${
-                  discountType === 'fixed' ? 'bg-orange-500 text-black' : 'bg-gray-700'
-                }`}
-              >
-                KES
-              </button>
-              <button
-                onClick={() => setDiscountType('percent')}
-                className={`flex-1 py-2 rounded text-sm ${
-                  discountType === 'percent' ? 'bg-orange-500 text-black' : 'bg-gray-700'
-                }`}
-              >
-                %
-              </button>
-            </div>
-
-            <input
-              type="number"
-              placeholder="Amount"
-              value={discountValue || ''}
-              onChange={(e) => setDiscountValue(Number(e.target.value))}
-              className="w-full bg-gray-700 p-3 rounded mb-4 text-white"
-            />
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setDiscountValue(0);
-                  setShowDiscountModal(false);
-                }}
-                className="w-full bg-gray-600 py-2 rounded font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => setShowDiscountModal(false)}
-                className="w-full bg-green-600 py-2 rounded font-bold"
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
