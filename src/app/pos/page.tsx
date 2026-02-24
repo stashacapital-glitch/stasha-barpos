@@ -18,13 +18,14 @@ export default function PosDashboard() {
     setLoading(true);
     
     // 1. Fetch Tables
+    // FIX: Changed 'number' to 'table_number' to match your database column
     const { data: tableData, error: tableError } = await supabase
       .from('tables')
       .select('*')
-      .order('number', { ascending: true });
+      .order('table_number', { ascending: true });
 
     if (tableError) {
-      console.error(tableError);
+      console.error('Database error:', JSON.stringify(tableError, null, 2));
       setLoading(false);
       return;
     }
@@ -75,8 +76,9 @@ export default function PosDashboard() {
             className="bg-gray-800 p-6 rounded-lg hover:bg-gray-700 transition border border-gray-700 hover:border-orange-500 text-center group flex flex-col justify-between min-h-[150px]"
           >
             <div>
+              {/* FIX: Display table_number */}
               <h3 className="text-3xl font-bold mb-2 group-hover:text-orange-400 transition">
-                {table.number}
+                {table.table_number}
               </h3>
               <span className={`text-xs px-2 py-1 rounded uppercase font-bold ${table.currentBill > 0 ? 'bg-red-600' : 'bg-green-600'}`}>
                 {table.currentBill > 0 ? 'OCCUPIED' : 'OPEN'}
