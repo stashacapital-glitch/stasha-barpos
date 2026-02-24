@@ -21,7 +21,8 @@ export default function MainDashboard() {
     const { data, error } = await supabase
       .from('plans')
       .select('*')
-      .order('price_monthly', { ascending: true });
+      // FIX 1: Changed 'price_monthly' to 'price_kes' to match your database
+      .order('price_kes', { ascending: true });
 
     if (error) {
       console.error('Error fetching plans:', error);
@@ -69,61 +70,73 @@ export default function MainDashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            {plans.map((plan) => (
-              <div
-                key={plan.id}
-                className={`relative rounded-2xl p-6 flex flex-col ${
-                  plan.highlight 
-                    ? 'bg-gray-800 border-2 border-orange-500 shadow-xl shadow-orange-500/20 transform scale-105 z-10' 
-                    : 'bg-gray-800 border border-gray-700'
-                }`}
-              >
-                {plan.highlight && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-orange-500 text-black text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                      <Star className="w-3 h-3" /> RECOMMENDED
-                    </span>
+            {plans.map((plan) => {
+              // FIX 2: Calculate yearly price (15% discount)
+              const yearlyPrice = Math.round(plan.price_kes * 12 * 0.85);
+              
+              // FIX 3: Determine highlight based on plan name (since we don't have a boolean column)
+              const isHighlighted = plan.name === 'Regular Plan';
+
+              return (
+                <div
+                  key={plan.id}
+                  className={`relative rounded-2xl p-6 flex flex-col ${
+                    isHighlighted 
+                      ? 'bg-gray-800 border-2 border-orange-500 shadow-xl shadow-orange-500/20 transform scale-105 z-10' 
+                      : 'bg-gray-800 border border-gray-700'
+                  }`}
+                >
+                  {isHighlighted && (
+                    <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                      <span className="bg-orange-500 text-black text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                        <Star className="w-3 h-3" /> RECOMMENDED
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="mb-4">
+                    <h3 className="text-xl font-bold text-white">{plan.name}</h3>
+                    {/* Added check for description since it might not exist in DB */}
+                    {plan.description && <p className="text-gray-400 text-sm mt-1">{plan.description}</p>}
                   </div>
-                )}
 
-                <div className="mb-4">
-                  <h3 className="text-xl font-bold text-white">{plan.name}</h3>
-                  <p className="text-gray-400 text-sm mt-1">{plan.description}</p>
-                </div>
-
-                <div className="mb-6">
-                  <div className="flex items-baseline">
-                    <span className="text-lg text-gray-400">KES</span>
-                    <span className="text-4xl font-bold text-white ml-1">
-                      {billingCycle === 'monthly' ? plan.price_monthly.toLocaleString() : plan.price_yearly.toLocaleString()}
-                    </span>
-                    <span className="text-gray-500 text-sm ml-2">/mo</span>
+                  <div className="mb-6">
+                    <div className="flex items-baseline">
+                      <span className="text-lg text-gray-400">KES</span>
+                      <span className="text-4xl font-bold text-white ml-1">
+                        {/* FIX 4: Use price_kes for monthly, calculated yearlyPrice for yearly */}
+                        {billingCycle === 'monthly' 
+                          ? plan.price_kes.toLocaleString() 
+                          : yearlyPrice.toLocaleString()}
+                      </span>
+                      <span className="text-gray-500 text-sm ml-2">/mo</span>
+                    </div>
                   </div>
+
+                  <ul className="space-y-3 mb-8 flex-grow">
+                    {plan.features.map((feature: string) => (
+                      <li key={feature} className="flex items-start text-sm text-gray-300">
+                        <Check className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* Link to the POS Dashboard */}
+                  <Link href="/pos" className="w-full">
+                    <button
+                      className={`w-full py-3 rounded-lg font-bold text-sm transition ${
+                        isHighlighted
+                          ? 'bg-orange-500 text-black hover:bg-orange-600'
+                          : 'bg-gray-700 text-white hover:bg-gray-600 border border-gray-600'
+                      }`}
+                    >
+                      Start Free Trial
+                    </button>
+                  </Link>
                 </div>
-
-                <ul className="space-y-3 mb-8 flex-grow">
-                  {plan.features.map((feature: string) => (
-                    <li key={feature} className="flex items-start text-sm text-gray-300">
-                      <Check className="w-4 h-4 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-
-                {/* Link to the POS Dashboard */}
-                <Link href="/pos" className="w-full">
-                  <button
-                    className={`w-full py-3 rounded-lg font-bold text-sm transition ${
-                      plan.highlight
-                        ? 'bg-orange-500 text-black hover:bg-orange-600'
-                        : 'bg-gray-700 text-white hover:bg-gray-600 border border-gray-600'
-                    }`}
-                  >
-                    Start Free Trial
-                  </button>
-                </Link>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
