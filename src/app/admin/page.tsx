@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { getPlanConfig, PlanType, PlanFeatures } from '@/utils/plans';
+// REMOVED: The line causing the error was here. It imported 'PlanFeatures' which doesn't exist and wasn't used.
 
 export default function AdminPage() {
   const router = useRouter();
@@ -33,6 +33,8 @@ export default function AdminPage() {
 
     if (error) {
       console.error('Error fetching stats:', error);
+      // Optional: You can uncomment the line below to show a toast notification
+      // toast.error('Failed to fetch stats');
     } else {
       const totalSales = data?.reduce((sum, order) => sum + (order.total_price || 0), 0) || 0;
       setStats({ sales: totalSales, orders: data?.length || 0 });
